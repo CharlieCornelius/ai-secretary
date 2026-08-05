@@ -1,0 +1,92 @@
+# https://docs.searxng.org/admin/settings/
+
+server:
+  secret_key: "KeuS6SmHIowA0G4YzsMbBg9QTR7gdPf"
+  image_proxy: true
+
+use_default_settings:
+  engines:
+    # === 白名单：只加载这些引擎，没列出的全部不加载（第三类真正关闭）===
+    keep_only:
+      # --- 第一类：启用 ---
+      - bing
+      - 360search
+      - baidu
+      - quark
+      - naver
+      # --- 第二类：可用但慢，保留备用 ---
+      - yandex
+      - wikimini
+      - dogpile
+      - mojeek
+      - crowdview
+      - searchmysite
+      - boardreader
+      - resulthunter
+      - gabanza
+      - reloado
+      - bpb
+      - ayo
+      - mwmbl
+      - fynd
+      - searchch
+      - vuhuv
+      - abcnyheter
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "zh"
+  formats:
+    - html
+    - json
+
+# === 在白名单内部做启用/禁用细分 ===
+engines:
+  # --- 第一类：启用 ---
+  - name: bing
+    disabled: false
+  - name: 360search
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: quark
+    disabled: false
+
+  # --- 第二类：保留但禁用（以后想开改 false 即可）---
+  - name: naver
+    disabled: true
+  - name: yandex
+    disabled: true
+  - name: wikimini
+    disabled: true
+  - name: dogpile
+    disabled: true
+  - name: mojeek
+    disabled: true
+  - name: crowdview
+    disabled: true
+  - name: searchmysite
+    disabled: true
+  - name: boardreader
+    disabled: true
+  - name: resulthunter
+    disabled: true
+  - name: gabanza
+    disabled: true
+  - name: reloado
+    disabled: true
+  - name: bpb
+    disabled: true
+  - name: ayo
+    disabled: true
+  - name: mwmbl
+    disabled: true
+  - name: fynd
+    disabled: true
+  - name: searchch
+    disabled: true
+  - name: vuhuv
+    disabled: true
+  - name: abcnyheter
+    disabled: true

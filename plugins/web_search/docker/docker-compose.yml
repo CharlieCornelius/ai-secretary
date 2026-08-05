@@ -1,0 +1,50 @@
+name: searxng
+
+services:
+  core:
+    container_name: searxng-core
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 监听地址，127.0.0.1 仅本机可访问（安全推荐）
+      # 如需局域网/公网访问，改为 0.0.0.0
+      - SEARXNG_HOST=0.0.0.0
+
+      # 实例访问地址（影响搜索结果中的链接）
+      - SEARXNG_BASE_URL=http://searxng-core:8080
+    volumes:
+      - ./core-config:/etc/searxng
+      - ./searxng-data:/var/cache/searxng
+    networks:
+      - searxng-net
+    depends_on:
+      valkey:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    container_name: searxng-valkey
+    image: docker.io/valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: valkey-server --save "" --appendonly no
+    networks:
+      - searxng-net
+    volumes:
+      - ./valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  searxng-net:
+    driver: bridge

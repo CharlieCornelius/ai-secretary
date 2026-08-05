@@ -1,0 +1,18 @@
+name: web_search
+version: "1.0.0"
+description: "网页搜索插件：通过 SearXNG 聚合搜索引擎获取实时互联网信息"
+enabled: true
+
+tools:
+  - name: search_web
+    description: "搜索互联网获取实时信息。当用户询问新闻、最新事件、当前时间敏感的信息，或知识库无法回答的问题时使用。"
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: "搜索关键词"
+        max_results:
+          type: integer
+          description: "返回结果数量，默认 5 条，最大 10 条"
+      required: ["query"]

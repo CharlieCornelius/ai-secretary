@@ -1,0 +1,4 @@
+searxng:
+  base_url: "http://searxng-core:8080"
+  timeout: 15
+  default_max_results: 5
