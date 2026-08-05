@@ -1,0 +1,38 @@
+[project]
+name = "ai-secretary"
+version = "0.1.0"
+description = "AI Secretary - AI 秘书服务"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "langgraph>=0.2",
+    "langchain>=0.3",
+    "langchain-openai>=0.1",
+    "chromadb>=0.5",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "pydantic>=2.0",
+    "structlog>=24.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "httpx2>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app", "app.api", "app.api.routes", "app.common", "app.db", "app.engine", "app.engine.nodes", "app.memory", "app.plugins"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+cache_dir = "tests/.pytest_cache"

@@ -1,0 +1,74 @@
+# === AI Secretary 主配置 ===
+# 支持 ${VAR} 和 ${VAR:-default} 环境变量占位符（${VAR} 取环境变量，无则空；
+# ${VAR:-default} 取环境变量，无则用 default）。部署时可通过环境变量注入，或直接编辑此文件。
+# 未知字段会在启动时报错（严格模式），请勿拼写错误。
+
+# 服务器
+server:
+  host: 0.0.0.0            # 监听地址，0.0.0.0=所有网卡
+  port: 8000              # 监听端口
+  reload: false           # uvicorn 热重载（开发用，生产保持 false）
+
+# 应用元信息（FastAPI / OpenAPI 文档展示）
+app:
+  title: AI Secretary
+  description: AI 秘书 - 智能对话
+  version: "1.0.0"
+
+# 数据库（SQLite，单文件）
+database:
+  url: sqlite+aiosqlite:///data/secretary.db   # 连接串；相对路径基于项目根目录
+  echo: false                                  # 是否打印 SQL（调试用）
+  pool_pre_ping: true                          # 取连接前做健康检查，避免用已断开的连接
+
+# 向量库（Chroma，用于经验库）
+chroma:
+  persist_directory: data/chroma   # 持久化目录；相对路径基于项目根目录
+  collection_name: experience      # 集合名
+  hnsw_space: cosine               # 相似度算法：cosine / l2 / ip
+
+# 插件目录（相对路径基于项目根目录）
+plugins:
+  directory: plugins
+
+# CORS 配置（跨域）
+cors:
+  allow_origins: ["*"]        # 允许的来源，["*"]=任意
+  allow_methods: ["*"]        # 允许的 HTTP 方法
+  allow_headers: ["*"]        # 允许的请求头
+  allow_credentials: false    # 携带凭证；origins=* 时必须 false
+
+# LLM 配置（必填，缺失启动报错）
+llm:
+  api_key: ${OPENAI_API_KEY}        # OpenAI 兼容 API Key
+  base_url: ${OPENAI_BASE_URL}      # OpenAI 兼容接口地址
+  model: ${OPENAI_MODEL}            # 模型名
+  temperature: 1                    # 主对话温度
+  max_tokens: 4096                  # 主对话最大输出 token
+  sub_task_max_tokens: 2048         # 子任务（画像/经验提取）最大输出 token
+  sub_task_temperature: 1           # 子任务温度
+  max_retries: 2                    # LLM 调用失败重试次数（含瞬时错误）
+
+# 认证配置（可缺省，api_keys 为空 = 无需 API Key 即可访问）
+auth:
+  api_keys: ${AUTH_API_KEYS:-[]}    # 合法 Key 列表，如 ["key1","key2"]；[] = 免认证
+  api_key_header: X-API-Key         # 认证请求头名
+
+# 对话上下文与工具编排
+context:
+  max_context_turns: 20     # 注入 LLM 的历史消息条数（最近 N 条）
+  max_tool_iterations: 5    # 单轮对话工具调用循环上限，防止无限编排
+
+# 审计日志（全量交互记录，只追加）
+audit:
+  max_logs: 1000000   # 条数上限，超过则触发滚动清理
+  trim_ratio: 0.1     # 超上限时删除最旧的比例（删 max_logs * trim_ratio 条）
+
+# 后台任务运行器（画像/经验维护、审计清理等 fire-and-forget 任务）
+background:
+  shutdown_timeout: 5.0   # 关闭时等待在途后台任务的超时秒数，超时则取消
+
+# 日志（structlog）
+logging:
+  level: INFO    # 日志级别：DEBUG / INFO / WARNING / ERROR
+  format: json   # 输出格式：json（生产）/ console（开发可读）

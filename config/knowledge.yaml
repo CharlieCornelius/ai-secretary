@@ -1,0 +1,36 @@
+# 知识注入配置（组装 system prompt 的各段：角色 + 时间 + 工具列表 + 画像 + 经验 + 上下文）
+
+# 当前时间上下文（注入 system prompt，让 LLM 感知时间）
+time_format:
+  weekdays:                 # 周一到周日，按 Python weekday() 顺序（0=周一）
+    - "星期一"
+    - "星期二"
+    - "星期三"
+    - "星期四"
+    - "星期五"
+    - "星期六"
+    - "星期日"
+  format: "当前时间：{date} {weekday} {time}"   # 时间展示模板，{date}/{weekday}/{time} 占位
+  date_format: "%Y年%m月%d日"                   # strftime 日期格式
+  time_format: "%H:%M"                          # strftime 时间格式
+
+# system prompt 各段之间的分隔符
+prompt_separator: "\n\n---\n\n"
+
+# 注入 system prompt 的各段标题与提示文案
+# 其中 tool_list_entry / memory_entry / experience_entry / group_chat_prefix 为每条记录的格式模板，
+# 含 {name}/{desc}/{k}/{v}/{exp}/{user_id}/{content} 等占位符，由程序运行时填充
+prompt_prefixes:
+  tool_list_header: "你可以使用以下工具完成操作："      # 工具列表段标题（仅注册了工具时注入）
+  tool_list_footer: "当用户有相关需求时，请主动调用对应工具。"  # 工具列表段尾注
+  # 注意：tool_list_entry（每行工具格式，{name}/{desc}）在 app.yaml 之外的默认值由 config.py 提供
+  memory_header: "你对该用户的认知："                  # 用户画像段标题
+  # memory_entry 默认 "- {k}：{v}"（每条画像，{k}/{v}）
+  experience_header: "相关经验模式："                  # 经验段标题
+  # experience_entry 默认 "- {exp}"（每条经验，{exp}）
+  external_header: "外部知识："                        # 外部知识段标题（预留）
+  attachment_header: "用户发送了以下附件："            # 附件段标题（有附件时注入）
+  attachment_with_tools: "如果有可用工具处理附件请使用。"   # 有工具时的附件提示
+  attachment_no_tools: "你无法查看或理解此类型的附件，请告知用户。"  # 无工具时的附件提示
+  group_chat_hint: "当前为群聊模式，多人参与对话，每条消息前方的 [user_id] 标识发言者。提及或称呼用户时，优先使用用户的名字（如画像或上下文中已知），仅在无法获知名字时才使用 user_id。"  # 群聊模式提示（mode=group 时注入）
+  # group_chat_prefix 默认 "[{user_id}] {content}"（群聊历史每条 user 消息前缀，{user_id}/{content}）

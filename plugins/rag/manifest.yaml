@@ -1,0 +1,20 @@
+name: rag
+version: 1.0.0
+description: 外部 RAG 检索插件 - 调用外部 RAG 服务获取知识
+enabled: false
+
+tools:
+  - name: search_knowledge
+    description: 从外部知识库检索相关信息。当用户询问需要事实性知识、文档内容、产品信息等问题时使用。
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: 检索查询语句
+        top_k:
+          type: integer
+          description: 返回结果数量
+          default: 3
+      required:
+        - query

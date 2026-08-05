@@ -1,0 +1,17 @@
+name: profile_query
+version: 1.1.0
+description: 用户画像查询插件 - 查询群聊中其他参与者的画像信息
+
+tools:
+  - name: query_profile
+    description: 查询某位参与者的画像信息（喜好、性格、角色等）。当群聊中需要了解某位参与者的详细情况时使用。可通过 user_id 或名字查询，二选一即可。
+    parameters:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: 对话中出现的用户标识（如 [u123] 中的 u123）
+        name:
+          type: string
+          description: 参与者的名字（如对话中提到的"张三"）
+      required: []

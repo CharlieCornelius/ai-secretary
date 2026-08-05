@@ -1,0 +1,14 @@
+name: weather
+version: "1.0.0"
+description: 天气查询插件：查询指定城市的天气信息
+tools:
+  - name: get_weather
+    description: 查询指定城市的天气信息。当用户询问天气时使用此工具。
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+          description: 城市名，如 北京、Shanghai、Tokyo
+      required:
+        - city

@@ -1,0 +1,19 @@
+services:
+  ai-secretary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-secretary
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - OPENAI_API_KEY=xxx
+      - OPENAI_BASE_URL=xxx
+      - OPENAI_MODEL=xxx
+      - AUTH_API_KEYS=xxx
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - ./plugins:/app/plugins:ro
+    restart: unless-stopped
