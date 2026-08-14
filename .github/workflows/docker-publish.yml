@@ -8,6 +8,9 @@ on:
       - 'v*'
 
 jobs:
+  # ============================================================
+  # 第一步：安全准入检查（决定是否构建，并给出明确理由）
+  # ============================================================
   security-check:
     runs-on: ubuntu-latest
     outputs:
@@ -16,7 +19,7 @@ jobs:
       safe_version: ${{ steps.guard.outputs.safe_version }}
       skip_reason: ${{ steps.guard.outputs.skip_reason }}
     steps:
-      - name: 拉取完整代码
+      - name: 拉取完整代码（含全量历史，用于分支归属检查）
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -24,65 +27,79 @@ jobs:
       - name: 🛂 执行安全准入检查
         id: guard
         run: |
-          # set -x  # 打印每条命令，方便调试
+          echo "========================================"
+          echo "🔍 开始安全检查（仅 main 分支允许构建）"
+          echo "========================================"
 
-          # ---------- 1. 防止 Bot 死循环 ----------
+          # ---------- 1. 防止 Bot 自动推送死循环 ----------
           if [[ "${{ github.actor }}" == "github-actions[bot]" ]]; then
+            echo "🤖 检测到 Bot 自动生成的标签，跳过以防止死循环"
             echo "should_build=false" >> $GITHUB_OUTPUT
             echo "skip_reason=⏭️ 系统自动生成的标签，跳过以防止死循环" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # ---------- 2. 检查当前 commit 是否属于 main 分支 ----------
-          # 使用更可靠的方式：列出所有包含该 commit 的本地分支
+          # ---------- 2. 强制要求：commit 必须属于 main 分支 ----------
           branches=$(git branch --contains ${{ github.sha }} | sed 's/^* //' | tr -d ' ')
-          echo "当前 commit 所在分支: $branches"
+          echo "📍 当前 Commit 所在分支: $branches"
+
           if [[ ! "$branches" =~ (^| )main($| ) ]]; then
+            echo "⛔ 安全检查未通过：该 Commit 不属于 [main] 分支，拒绝构建"
             echo "should_build=false" >> $GITHUB_OUTPUT
             echo "skip_reason=⛔ 违反策略：当前 Commit 不属于 [main] 分支，拒绝构建" >> $GITHUB_OUTPUT
             exit 0
           fi
+          echo "✅ 分支检查通过（位于 main）"
 
-          # ---------- 3. 处理标签推送（手动发布大版本）----------
+          # ---------- 3. 场景 A：手动推送标签（发布大版本） ----------
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             RAW_TAG="${{ github.ref_name }}"
             VERSION="${RAW_TAG#v}"
+            echo "🏷️  检测到标签推送: $RAW_TAG"
 
-            # 校验语义化版本格式
+            # 校验语义化版本格式（必须为 X.Y.Z）
             if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "⛔ 版本号格式错误：'$RAW_TAG' 不符合语义化版本 (正确示例: v1.2.3)"
               echo "should_build=false" >> $GITHUB_OUTPUT
-              echo "skip_reason=⛔ 标签格式错误：'$RAW_TAG' 不符合语义化版本 (正确示例: v1.2.3)" >> $GITHUB_OUTPUT
+              echo "skip_reason=⛔ 标签格式错误：'$RAW_TAG' 不符合语义化版本" >> $GITHUB_OUTPUT
               exit 0
             fi
 
-            # 检查标签是否已被占用（禁止覆盖）
+            # 检查标签是否已被占用（禁止覆盖历史版本）
             if git rev-parse "$RAW_TAG" >/dev/null 2>&1; then
               TAG_COMMIT=$(git rev-list -n 1 "$RAW_TAG")
               if [[ "$TAG_COMMIT" != "${{ github.sha }}" ]]; then
+                echo "⛔ 标签冲突：'$RAW_TAG' 已指向其他 Commit，禁止覆盖历史版本"
                 echo "should_build=false" >> $GITHUB_OUTPUT
-                echo "skip_reason=⛔ 标签冲突：'$RAW_TAG' 已指向其他 Commit，禁止覆盖历史版本" >> $GITHUB_OUTPUT
+                echo "skip_reason=⛔ 标签冲突：'$RAW_TAG' 已存在且指向不同 Commit" >> $GITHUB_OUTPUT
                 exit 0
               fi
             fi
 
-            # 通过检查：允许构建标签
+            # 全部通过：构建大版本
+            echo "✅ 安全检查全部通过！将构建大版本: $VERSION"
             echo "should_build=true" >> $GITHUB_OUTPUT
             echo "is_tag_trigger=true" >> $GITHUB_OUTPUT
             echo "safe_version=$VERSION" >> $GITHUB_OUTPUT
-            echo "✅ 通过安检：手动发布大版本 $VERSION" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # ---------- 4. 处理 main 分支推送（自动递增补丁）----------
+          # ---------- 4. 场景 B：推送 main 分支（自动递增补丁） ----------
           if [[ "${{ github.event_name }}" == "push" ]] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
             COMMIT_MSG="${{ github.event.head_commit.message }}"
+            echo "📝 检测到 main 分支推送，Commit 信息: $COMMIT_MSG"
+
+            # 必须携带 [build] 标记才允许构建
             if [[ ! "$COMMIT_MSG" =~ \[build\] ]]; then
+              echo "⏭️  安全检查未通过：Commit 中未携带 [build] 标记，本次跳过构建"
+              echo "💡 提示：如需发布补丁版本，请在 commit 消息中包含 [build]"
               echo "should_build=false" >> $GITHUB_OUTPUT
               echo "skip_reason=⏭️ 未携带 [build] 标记，本次推送不触发构建" >> $GITHUB_OUTPUT
               exit 0
             fi
+            echo "✅ Commit 中包含 [build] 标记，准备自动递增补丁号"
 
-            # 获取最新合规的 Tag
+            # 获取最新的语义化标签（按版本号排序）
             LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
             [ -z "$LATEST_TAG" ] && LATEST_TAG="v0.0.0"
             BASE_VERSION="${LATEST_TAG#v}"
@@ -90,27 +107,36 @@ jobs:
             NEW_PATCH=$((patch + 1))
             NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
 
+            echo "📌 最新版本: $LATEST_TAG -> 自动递增为: v$NEW_VERSION"
+            echo "✅ 安全检查全部通过！将构建补丁版本: $NEW_VERSION"
+
             echo "should_build=true" >> $GITHUB_OUTPUT
             echo "is_tag_trigger=false" >> $GITHUB_OUTPUT
             echo "safe_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "✅ 通过安检：自动递增补丁 $LATEST_TAG -> v$NEW_VERSION" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # ---------- 5. 兜底：未预料的情况 ----------
+          # ---------- 5. 兜底：未预料到的触发情况 ----------
+          echo "⚠️  未知触发条件，跳过构建（事件: ${{ github.event_name }}）"
           echo "should_build=false" >> $GITHUB_OUTPUT
-          echo "skip_reason=⚠️ 未知触发条件：event_name=${{ github.event_name }}, ref=${{ github.ref }}" >> $GITHUB_OUTPUT
+          echo "skip_reason=⚠️ 未知触发条件：event_name=${{ github.event_name }}" >> $GITHUB_OUTPUT
 
+  # ============================================================
+  # 第二步：构建并推送 Docker 镜像（仅在安检通过时执行）
+  # ============================================================
   build-and-push:
     needs: security-check
     if: needs.security-check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      packages: write
+      contents: write      # 用于推送自动生成的补丁标签
+      packages: write      # 用于推送镜像到 GHCR
+
+    # 防止同时触发分支和标签时重复构建（自动取消冗余任务）
     concurrency:
       group: ${{ github.sha }}
       cancel-in-progress: true
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -118,7 +144,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 设置 Docker Buildx
+      - name: 显示即将构建的版本号
+        run: |
+          echo "========================================"
+          echo "🚀 开始构建镜像版本: ${{ needs.security-check.outputs.safe_version }}"
+          echo "========================================"
+
+      - name: 设置 Docker Buildx（支持多架构）
         uses: docker/setup-buildx-action@v3
 
       - name: 登录 GitHub Container Registry
@@ -140,7 +172,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 📌 自动创建补丁标签
+      - name: 📌 自动创建补丁标签（仅当由 main 分支 [build] 触发时）
         if: needs.security-check.outputs.is_tag_trigger == 'false'
         run: |
           git config user.name "github-actions[bot]"
