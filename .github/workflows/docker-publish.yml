@@ -8,9 +8,6 @@ on:
       - 'v*'
 
 jobs:
-  # ============================================================
-  # 第一步：严格的“安检门”（防止一切误操作）
-  # ============================================================
   security-check:
     runs-on: ubuntu-latest
     outputs:
@@ -19,7 +16,7 @@ jobs:
       safe_version: ${{ steps.guard.outputs.safe_version }}
       skip_reason: ${{ steps.guard.outputs.skip_reason }}
     steps:
-      - name: 拉取完整代码（用于检测分支归属）
+      - name: 拉取完整代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -27,36 +24,39 @@ jobs:
       - name: 🛂 执行安全准入检查
         id: guard
         run: |
-          # ----- 误操作 1：防止 Bot 死循环 -----
+          set -x  # 打印每条命令，方便调试
+
+          # ---------- 1. 防止 Bot 死循环 ----------
           if [[ "${{ github.actor }}" == "github-actions[bot]" ]]; then
             echo "should_build=false" >> $GITHUB_OUTPUT
             echo "skip_reason=⏭️ 系统自动生成的标签，跳过以防止死循环" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # ----- 误操作 2：必须是 main 分支的 Commit 才能构建 -----
+          # ---------- 2. 检查当前 commit 是否属于 main 分支 ----------
+          # 使用更可靠的方式：列出所有包含该 commit 的本地分支
           branches=$(git branch --contains ${{ github.sha }} | sed 's/^* //' | tr -d ' ')
+          echo "当前 commit 所在分支: $branches"
           if [[ ! "$branches" =~ (^| )main($| ) ]]; then
             echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "skip_reason=⛔ 违反策略：当前 Commit (${{ github.sha }}) 不属于 [main] 分支，拒绝构建" >> $GITHUB_OUTPUT
+            echo "skip_reason=⛔ 违反策略：当前 Commit 不属于 [main] 分支，拒绝构建" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # ----- 场景 A：处理标签推送（手动发布大版本）-----
+          # ---------- 3. 处理标签推送（手动发布大版本）----------
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             RAW_TAG="${{ github.ref_name }}"
-            VERSION="${RAW_TAG#v}"  # 去掉 v 前缀
-            
-            # 误操作 3：校验语义化版本格式 (必须为 X.Y.Z)
+            VERSION="${RAW_TAG#v}"
+
+            # 校验语义化版本格式
             if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "should_build=false" >> $GITHUB_OUTPUT
               echo "skip_reason=⛔ 标签格式错误：'$RAW_TAG' 不符合语义化版本 (正确示例: v1.2.3)" >> $GITHUB_OUTPUT
               exit 0
             fi
 
-            # 误操作 4：检查该 Tag 是否已被占用（禁止覆盖历史版本）
+            # 检查标签是否已被占用（禁止覆盖）
             if git rev-parse "$RAW_TAG" >/dev/null 2>&1; then
-              # 检查这个 tag 是否恰好指向当前的 commit
               TAG_COMMIT=$(git rev-list -n 1 "$RAW_TAG")
               if [[ "$TAG_COMMIT" != "${{ github.sha }}" ]]; then
                 echo "should_build=false" >> $GITHUB_OUTPUT
@@ -65,7 +65,7 @@ jobs:
               fi
             fi
 
-            # 通过全部检查，允许构建标签
+            # 通过检查：允许构建标签
             echo "should_build=true" >> $GITHUB_OUTPUT
             echo "is_tag_trigger=true" >> $GITHUB_OUTPUT
             echo "safe_version=$VERSION" >> $GITHUB_OUTPUT
@@ -73,33 +73,34 @@ jobs:
             exit 0
           fi
 
-          # ----- 场景 B：处理 main 分支推送（自动递增补丁）-----
-          # 误操作 5：必须包含 [build] 指令
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          if [[ ! "$COMMIT_MSG" =~ \[build\] ]]; then
-            echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "skip_reason=⏭️ 未携带 [build] 标记，本次推送不触发构建（如需发布，请在 commit 中添加 [build]）" >> $GITHUB_OUTPUT
+          # ---------- 4. 处理 main 分支推送（自动递增补丁）----------
+          if [[ "${{ github.event_name }}" == "push" ]] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            COMMIT_MSG="${{ github.event.head_commit.message }}"
+            if [[ ! "$COMMIT_MSG" =~ \[build\] ]]; then
+              echo "should_build=false" >> $GITHUB_OUTPUT
+              echo "skip_reason=⏭️ 未携带 [build] 标记，本次推送不触发构建" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # 获取最新合规的 Tag
+            LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
+            [ -z "$LATEST_TAG" ] && LATEST_TAG="v0.0.0"
+            BASE_VERSION="${LATEST_TAG#v}"
+            IFS='.' read -r major minor patch <<< "$BASE_VERSION"
+            NEW_PATCH=$((patch + 1))
+            NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
+
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "is_tag_trigger=false" >> $GITHUB_OUTPUT
+            echo "safe_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "✅ 通过安检：自动递增补丁 $LATEST_TAG -> v$NEW_VERSION" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # 获取最新合规的 Tag 并自动递增补丁号
-          LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0"
-          fi
-          BASE_VERSION="${LATEST_TAG#v}"
-          IFS='.' read -r major minor patch <<< "$BASE_VERSION"
-          NEW_PATCH=$((patch + 1))
-          NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
-          
-          echo "should_build=true" >> $GITHUB_OUTPUT
-          echo "is_tag_trigger=false" >> $GITHUB_OUTPUT
-          echo "safe_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "✅ 通过安检：自动递增补丁 $LATEST_TAG -> v$NEW_VERSION" >> $GITHUB_OUTPUT
+          # ---------- 5. 兜底：未预料的情况 ----------
+          echo "should_build=false" >> $GITHUB_OUTPUT
+          echo "skip_reason=⚠️ 未知触发条件：event_name=${{ github.event_name }}, ref=${{ github.ref }}" >> $GITHUB_OUTPUT
 
-  # ============================================================
-  # 第二步：执行构建（只有安检通过才执行）
-  # ============================================================
   build-and-push:
     needs: security-check
     if: needs.security-check.outputs.should_build == 'true'
@@ -107,12 +108,9 @@ jobs:
     permissions:
       contents: write
       packages: write
-    
-    # 【优雅亮点】如果同时触发了分支和标签（git push --tags），自动取消冗余的分支任务
-    concurrency: 
+    concurrency:
       group: ${{ github.sha }}
       cancel-in-progress: true
-
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -142,7 +140,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 📌 自动创建补丁标签（仅当由 main 分支 [build] 触发时）
+      - name: 📌 自动创建补丁标签
         if: needs.security-check.outputs.is_tag_trigger == 'false'
         run: |
           git config user.name "github-actions[bot]"
