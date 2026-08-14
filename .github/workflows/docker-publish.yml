@@ -24,7 +24,7 @@ jobs:
       - name: 🛂 执行安全准入检查
         id: guard
         run: |
-          set -x  # 打印每条命令，方便调试
+          # set -x  # 打印每条命令，方便调试
 
           # ---------- 1. 防止 Bot 死循环 ----------
           if [[ "${{ github.actor }}" == "github-actions[bot]" ]]; then
